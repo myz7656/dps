@@ -33,12 +33,17 @@ class Dependencies implements Plugin<Project> {
                 /**
                  * 标记重复节点
                  */
-                markDuplicate(root, exist)
+                List<DependencyNode> duplicate = new LinkedList<>()
+                root.children.each {
+                    markDuplicate(it, exist, duplicate)
+                }
 
                 /**
                  * 计算依赖大小：节点总大小、单独引入的大小
                  */
-                calculateSize(root, exist)
+                root.children.each {
+                    calculateSize(it, duplicate)
+                }
 
                 /**
                  * 展示依赖树
@@ -97,7 +102,7 @@ class Dependencies implements Plugin<Project> {
         return node
     }
 
-    static void markDuplicate(DependencyNode node, Set<DependencyNode> exist) {
+    static void markDuplicate(DependencyNode node, Set<DependencyNode> exist, List<DependencyNode> duplicate) {
         if (!node.duplicate) {
             for (DependencyNode it : exist) {
                 if (it == node && it.duplicate) {
@@ -107,24 +112,59 @@ class Dependencies implements Plugin<Project> {
             }
         }
 
+        if (node.duplicate) {
+            duplicate.add(node)
+        }
+
         node.children.each {
-            markDuplicate(it, exist)
+            markDuplicate(it, exist, duplicate)
         }
     }
 
-    static calculateSize(DependencyNode node, Set<DependencyNode> exist) {
-        node.totalSize = node.selfSize
-        node.affectSize = node.selfSize
-        if (node.duplicate) {
-            node.affectSize = 0
+    static void flatten(DependencyNode node, Set<DependencyNode> unique) {
+        unique.add(node)
+
+        node.children.each {
+            flatten(it, unique)
+        }
+    }
+
+    static void calculateSize(DependencyNode node, List<DependencyNode> duplicate) {
+        Set<DependencyNode> unique = new LinkedHashSet<>()
+        flatten(node, unique)
+
+        node.totalSize = 0
+        node.affectSize = 0
+        unique.each {
+            node.totalSize += it.selfSize
+            if (!it.duplicate ||
+                    duplicateInNode(node, it, duplicate)) {
+                node.affectSize += it.selfSize
+            }
         }
 
         node.children.each {
-            def (total, affect) = calculateSize(it, exist)
-            node.totalSize += total
-            node.affectSize += affect
+            calculateSize(it, duplicate)
         }
-        return [node.totalSize, node.affectSize]
+    }
+
+    static boolean duplicateInNode(DependencyNode root, DependencyNode node, List<DependencyNode> duplicate) {
+        for (DependencyNode it : duplicate) {
+            if (it != node) {
+                continue
+            }
+
+            DependencyNode parent = it
+            while (parent != null && parent != root) {
+                parent = parent.parent
+            }
+
+            if (parent != root) {
+                return false
+            }
+        }
+
+        return true
     }
 
     static void buildResolvedDependenciesTree(DependencyNode node, StringBuffer out, int format, int depth) {
