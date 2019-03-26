@@ -11,7 +11,7 @@ class DependencyNode implements Serializable {
     String id = ""
     String requestedVersion = ""
 
-    boolean seenBefore = false
+    boolean duplicate = false
     List<DependencyNode> children = new ArrayList<DependencyNode>()
 
     long selfSize = 0L
