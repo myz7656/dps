@@ -27,7 +27,7 @@ class Dependencies implements Plugin<Project> {
                 TreeNode tree = new TreeNode()
                 Map<String, Map<String, NodeMeta>> unique = new HashMap<>()
                 conf.incoming.resolutionResult.root.dependencies.each {
-                    TreeNode node = visitResolvedDependencies(tree, it, unique, conf.incoming.artifacts)
+                    TreeNode node = buildResolvedDependenciesTree(tree, it, unique, conf.incoming.artifacts)
                     tree.children.add(node)
 
                     mergeNodeMeta(tree.flattenedChild, node.flattenedChild)
@@ -47,9 +47,9 @@ class Dependencies implements Plugin<Project> {
                 tree.children.each {
                     boolean last = (it == tree.children.last())
                     int format = make(0, last, INIT_DEPTH)
-                    buildResolvedDependenciesTree(it, strTree, format, INIT_DEPTH)
+                    showResolvedDependenciesTree(it, strTree, format, INIT_DEPTH)
                 }
-                print(strTree)
+                println(strTree)
 
                 /**
                  * 展示大小排行榜
@@ -60,12 +60,12 @@ class Dependencies implements Plugin<Project> {
                 }.each {
                     strSort << it.key << " (" << it.value.size << " " << formatSize(it.value.size) << ")\n"
                 }
-                print(strSort)
+                println(strSort)
             }
         }
     }
 
-    static TreeNode visitResolvedDependencies(TreeNode parent, DependencyResult result, Map<String, Map<String, NodeMeta>> unique, ArtifactCollection artifacts) {
+    static TreeNode buildResolvedDependenciesTree(TreeNode parent, DependencyResult result, Map<String, Map<String, NodeMeta>> unique, ArtifactCollection artifacts) {
         TreeNode treeNode = new TreeNode()
         treeNode.parent = parent
 
@@ -100,7 +100,7 @@ class Dependencies implements Plugin<Project> {
 
             if (!unique.containsKey(node.id)) {
                 r.selected.dependencies.each {
-                    TreeNode child = visitResolvedDependencies(treeNode, it, unique, artifacts)
+                    TreeNode child = buildResolvedDependenciesTree(treeNode, it, unique, artifacts)
                     treeNode.children.add(child)
 
                     mergeNodeMeta(treeNode.flattenedChild, child.flattenedChild)
@@ -165,14 +165,14 @@ class Dependencies implements Plugin<Project> {
         }
     }
 
-    static void buildResolvedDependenciesTree(TreeNode treeNode, StringBuffer out, int format, int depth) {
+    static void showResolvedDependenciesTree(TreeNode treeNode, StringBuffer out, int format, int depth) {
         showResolvedDependencyNode(treeNode, out, format, depth)
 
         treeNode.children.each {
             boolean last = (it == treeNode.children.last())
             int dep = depth + DEPTH_STEP
             int f = make(format, last, dep)
-            buildResolvedDependenciesTree(it, out, f, dep)
+            showResolvedDependenciesTree(it, out, f, dep)
         }
     }
 
