@@ -1,20 +1,15 @@
 package com.meituan.retail.dependencies
 
-class DependencyNode implements Serializable {
-
-    DependencyNode parent = null
+class DependencyNode {
+    String id = ""
 
     String group = ""
     String name = ""
     String version = ""
 
-    String id = ""
     String requestedVersion = ""
-
-    boolean duplicate = false
-    List<DependencyNode> children = new ArrayList<DependencyNode>()
-
     long selfSize = 0L
+
     long totalSize = 0L
     long affectSize = 0L
 
@@ -24,29 +19,22 @@ class DependencyNode implements Serializable {
 
         final DependencyNode that = (DependencyNode) o
 
-        if (group != that.group) return false
-        if (name != that.name) return false
-        if (version != that.version) return false
+        if (id != that.id) return false
 
         return true
     }
 
     int hashCode() {
-        int result
-        result = (group != null ? group.hashCode() : 0)
-        result = 31 * result + (name != null ? name.hashCode() : 0)
-        result = 31 * result + (version != null ? version.hashCode() : 0)
-        return result
+        return (id != null ? id.hashCode() : 0)
     }
 
-
     @Override
-    public String toString() {
+    String toString() {
         return "DependencyNode {" + '\n' +
+                "  id='" + id + '\'' + ',' + '\n' +
                 "  group='" + group + '\'' + '\n' +
                 "  name='" + name + '\'' + ',' + '\n' +
                 "  version='" + version + '\'' + ',' + '\n' +
-                "  id='" + id + '\'' + ',' + '\n' +
                 "  requestedVersion='" + requestedVersion + '\'' + ',' + '\n' +
                 "  selfSize=" + selfSize + '\n' +
                 '}'

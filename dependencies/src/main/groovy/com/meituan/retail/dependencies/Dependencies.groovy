@@ -13,6 +13,7 @@ class Dependencies implements Plugin<Project> {
 
     static final int INIT_DEPTH = 1
     static final int DEPTH_STEP = 1
+    static final int DEFAULT_COUNT = 1
 
     @Override
     void apply(Project project) {
@@ -21,164 +22,162 @@ class Dependencies implements Plugin<Project> {
                 Configuration conf = project.configurations.getByName("_releaseApk")
 
                 /**
-                 * 构建依赖树，exist 用于保持唯一节点，内部会标记 duplicate 属性
+                 * 构建依赖树，unique 用于保持唯一节点
                  */
-                Set<DependencyNode> exist = new LinkedHashSet<>()
-                DependencyNode root = new DependencyNode()
+                TreeNode tree = new TreeNode()
+                Map<String, Map<String, NodeMeta>> unique = new HashMap<>()
                 conf.incoming.resolutionResult.root.dependencies.each {
-                    DependencyNode node = visitResolvedDependencies(root, it, exist, conf.incoming.artifacts)
-                    root.children.add(node)
-                }
+                    TreeNode node = visitResolvedDependencies(tree, it, unique, conf.incoming.artifacts)
+                    tree.children.add(node)
 
-                /**
-                 * 标记重复节点
-                 */
-                List<DependencyNode> duplicate = new LinkedList<>()
-                root.children.each {
-                    markDuplicate(it, exist, duplicate)
+                    mergeNodeMeta(tree.flattenedChild, node.flattenedChild)
                 }
 
                 /**
                  * 计算依赖大小：节点总大小、单独引入的大小
                  */
-                root.children.each {
-                    calculateSize(it, duplicate)
+                tree.children.each {
+                    calculateSize(it, tree)
                 }
 
                 /**
                  * 展示依赖树
                  */
-                StringBuffer out = new StringBuffer()
-                root.children.each {
-                    boolean last = (it == root.children.last())
+                StringBuffer strTree = new StringBuffer()
+                tree.children.each {
+                    boolean last = (it == tree.children.last())
                     int format = make(0, last, INIT_DEPTH)
-                    buildResolvedDependenciesTree(it, out, format, INIT_DEPTH)
+                    buildResolvedDependenciesTree(it, strTree, format, INIT_DEPTH)
                 }
-                print(out)
+                print(strTree)
+
+                /**
+                 * 展示大小排行榜
+                 */
+                StringBuffer strSort = new StringBuffer()
+                tree.flattenedChild.sort {
+                    -it.value.size
+                }.each {
+                    strSort << it.key << " (" << it.value.size << " " << formatSize(it.value.size) << ")\n"
+                }
+                print(strSort)
             }
         }
     }
 
-    static DependencyNode visitResolvedDependencies(DependencyNode parent, DependencyResult result, Set<DependencyNode> exist, ArtifactCollection artifacts) {
-        DependencyNode node = new DependencyNode()
+    static TreeNode visitResolvedDependencies(TreeNode parent, DependencyResult result, Map<String, Map<String, NodeMeta>> unique, ArtifactCollection artifacts) {
+        TreeNode treeNode = new TreeNode()
+        treeNode.parent = parent
+
+        DependencyNode node = treeNode.node
+
         if (result instanceof ResolvedDependencyResult) {
             ResolvedDependencyResult r = result
 
-            node.parent = parent
-
+            /**
+             * 准备 DependencyNode 信息
+             */
+            node.id = r.selected.id.displayName
             node.group = r.selected.moduleVersion.group
             node.name = r.selected.moduleVersion.name
             node.version = r.selected.moduleVersion.version
-            node.id = r.selected.id.displayName
-
+            if (r.requested instanceof ModuleComponentSelector) {
+                node.requestedVersion = ((ModuleComponentSelector)r.requested).version
+            }
             artifacts.artifacts.each { ResolvedArtifactResult rar ->
                 if (node.id == rar.getId().componentIdentifier.displayName) {
                     node.selfSize = rar.file.size()
                 }
             }
 
-            if (r.requested instanceof ModuleComponentSelector) {
-                node.requestedVersion = ((ModuleComponentSelector)r.requested).version
-            }
+            /**
+             * 添加扁平化后的节点信息，添加子树结构
+             * 1，这里如果子树如果已经解析过，则不再解析
+             * 2，递归将子树的扁平化后的信息添加到父节点的扁平化信息中
+             * 3，如果遇到已经解析过的子树节点，扁平化信息从全局的 map 中获取得到
+             */
+            mergeNodeMeta(treeNode.flattenedChild, node)
 
-            if (exist.add(node)) {
+            if (!unique.containsKey(node.id)) {
                 r.selected.dependencies.each {
-                    DependencyNode childNode = visitResolvedDependencies(node, it, exist, artifacts)
-                    node.children.add(childNode)
+                    TreeNode child = visitResolvedDependencies(treeNode, it, unique, artifacts)
+                    treeNode.children.add(child)
+
+                    mergeNodeMeta(treeNode.flattenedChild, child.flattenedChild)
                 }
+                unique.put(node.id, treeNode.flattenedChild)
             } else {
-                node.duplicate = true
-                exist.each {
-                    if (it == node) {
-                        it.duplicate = true
-                    }
-                }
+                Map<String, NodeMeta> flatten = unique.get(node.id)
+                mergeNodeMeta(treeNode.flattenedChild, flatten)
             }
         } else {
-            node.parent = parent
-            node.name = "Could not resolve $result.requested.displayName"
+            node.id = "could not resolve $result.requested.displayName"
+            mergeNodeMeta(treeNode.flattenedChild, node)
         }
 
-        return node
+        return treeNode
     }
 
-    static void markDuplicate(DependencyNode node, Set<DependencyNode> exist, List<DependencyNode> duplicate) {
-        if (!node.duplicate) {
-            for (DependencyNode it : exist) {
-                if (it == node && it.duplicate) {
-                    node.duplicate = true
-                    break
+    static void mergeNodeMeta(Map<String, NodeMeta> to, Map<String, NodeMeta> from) {
+        from.each {
+            if (to.containsKey(it.key)) {
+                NodeMeta meta = to.get(it.key)
+                meta.count += it.value.count
+            } else {
+                to.put(it.key, new NodeMeta(it.value.count, it.value.size))
+            }
+        }
+    }
+
+    static void mergeNodeMeta(Map<String, NodeMeta> to, DependencyNode from) {
+        if (to.containsKey(from.id)) {
+            NodeMeta meta = to.get(from.id)
+            meta.count++
+        } else {
+            to.put(from.id, new NodeMeta(DEFAULT_COUNT, from.selfSize))
+        }
+    }
+
+    static void calculateSize(TreeNode treeNode, TreeNode root) {
+        DependencyNode node = treeNode.node
+        node.totalSize = 0L
+        node.affectSize = 0L
+
+        treeNode.flattenedChild.each {
+            node.totalSize += it.value.size
+        }
+
+        treeNode.flattenedChild.each {
+            if (it.key == node.id ||
+                    it.value.count == DEFAULT_COUNT) {
+                node.affectSize += it.value.size
+            } else {
+                NodeMeta rootNode = root.flattenedChild.get(it.key)
+                NodeMeta selfNode = it.value
+                if (rootNode != null && selfNode.count == rootNode.count) {
+                    node.affectSize += it.value.size
                 }
             }
         }
 
-        if (node.duplicate) {
-            duplicate.add(node)
-        }
-
-        node.children.each {
-            markDuplicate(it, exist, duplicate)
+        treeNode.children.each {
+            calculateSize(it, root)
         }
     }
 
-    static void flatten(DependencyNode node, Set<DependencyNode> unique) {
-        unique.add(node)
+    static void buildResolvedDependenciesTree(TreeNode treeNode, StringBuffer out, int format, int depth) {
+        showResolvedDependencyNode(treeNode, out, format, depth)
 
-        node.children.each {
-            flatten(it, unique)
-        }
-    }
-
-    static void calculateSize(DependencyNode node, List<DependencyNode> duplicate) {
-        Set<DependencyNode> unique = new LinkedHashSet<>()
-        flatten(node, unique)
-
-        node.totalSize = 0
-        node.affectSize = 0
-        unique.each {
-            node.totalSize += it.selfSize
-            if (!it.duplicate ||
-                    duplicateInNode(node, it, duplicate)) {
-                node.affectSize += it.selfSize
-            }
-        }
-
-        node.children.each {
-            calculateSize(it, duplicate)
-        }
-    }
-
-    static boolean duplicateInNode(DependencyNode root, DependencyNode node, List<DependencyNode> duplicate) {
-        for (DependencyNode it : duplicate) {
-            if (it != node) {
-                continue
-            }
-
-            DependencyNode parent = it
-            while (parent != null && parent != root) {
-                parent = parent.parent
-            }
-
-            if (parent != root) {
-                return false
-            }
-        }
-
-        return true
-    }
-
-    static void buildResolvedDependenciesTree(DependencyNode node, StringBuffer out, int format, int depth) {
-        showResolvedDependencyNode(node, out, format, depth)
-
-        node.children.each {
-            boolean last = (it == node.children.last())
+        treeNode.children.each {
+            boolean last = (it == treeNode.children.last())
             int dep = depth + DEPTH_STEP
             int f = make(format, last, dep)
             buildResolvedDependenciesTree(it, out, f, dep)
         }
     }
 
-    private static void showResolvedDependencyNode(DependencyNode node, StringBuffer out, int format, int depth) {
+    private static void showResolvedDependencyNode(TreeNode treeNode, StringBuffer out, int format, int depth) {
+        DependencyNode node = treeNode.node
         for (int i = 0; i < depth; ++i) {
             int actor = (0x1 << i)
             boolean last = (format & actor)
@@ -206,9 +205,11 @@ class Dependencies implements Plugin<Project> {
         String totalStr = formatSize(node.totalSize)
         String affectStr = formatSize(node.affectSize)
         out << "  (size:" << sizeStr
-        if (node.children.size() > 0) {
+
+        if (node.totalSize > node.selfSize) {
             out << ", total:" << totalStr
         }
+
         if (node.affectSize > 0) {
             out << ", affect:" << affectStr
         }
