@@ -61,6 +61,15 @@ class Dependencies implements Plugin<Project> {
                     strSort << it.key << " (" << it.value.size << " " << formatSize(it.value.size) << ")\n"
                 }
                 println(strSort)
+
+
+                unique.each {
+                    println("-----" + it.key + "-----")
+                    it.value.each { Map.Entry<String, NodeMeta> entry ->
+                        println(entry.key + " count:" + entry.value.count)
+                    }
+                    println()
+                }
             }
         }
     }
@@ -96,8 +105,7 @@ class Dependencies implements Plugin<Project> {
              * 2，递归将子树的扁平化后的信息添加到父节点的扁平化信息中
              * 3，如果遇到已经解析过的子树节点，扁平化信息从全局的 map 中获取得到
              */
-            mergeNodeMeta(treeNode.flattenedChild, node)
-
+            treeNode.flattenedChild.put(node.id, new NodeMeta(DEFAULT_COUNT, node.selfSize))
             if (!unique.containsKey(node.id)) {
                 r.selected.dependencies.each {
                     TreeNode child = buildResolvedDependenciesTree(treeNode, it, unique, artifacts)
@@ -129,15 +137,6 @@ class Dependencies implements Plugin<Project> {
         }
     }
 
-    static void mergeNodeMeta(Map<String, NodeMeta> to, DependencyNode from) {
-        if (to.containsKey(from.id)) {
-            NodeMeta meta = to.get(from.id)
-            meta.count++
-        } else {
-            to.put(from.id, new NodeMeta(DEFAULT_COUNT, from.selfSize))
-        }
-    }
-
     static void calculateSize(TreeNode treeNode, TreeNode root) {
         DependencyNode node = treeNode.node
         node.totalSize = 0L
@@ -148,8 +147,7 @@ class Dependencies implements Plugin<Project> {
         }
 
         treeNode.flattenedChild.each {
-            if (it.key == node.id ||
-                    it.value.count == DEFAULT_COUNT) {
+            if (it.value.count == DEFAULT_COUNT) {
                 node.affectSize += it.value.size
             } else {
                 NodeMeta rootNode = root.flattenedChild.get(it.key)
