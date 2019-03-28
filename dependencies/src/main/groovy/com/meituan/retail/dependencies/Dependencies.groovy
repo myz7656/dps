@@ -25,9 +25,13 @@ class Dependencies implements Plugin<Project> {
         project.extensions.create("dep", DepExtensions)
         project.task("x-dependencies") {
             doLast {
+                DepExtensions ext = project.extensions.getByName("dep")
+                String serverUrl = ext.serverUrl
+                boolean sort = ext.showSort
+
                 project.configurations.each {
                     println(it.name + " - " + it.description)
-                    runConfiguration(it, false)
+                    runConfiguration(it, sort)
                 }
             }
         }
@@ -68,7 +72,6 @@ class Dependencies implements Plugin<Project> {
             println("No dependencies\n")
         }
 
-
         /**
          * 展示大小排行榜
          */
@@ -79,7 +82,9 @@ class Dependencies implements Plugin<Project> {
             }.each {
                 strSort << it.key << " (" << it.value.size << " " << formatSize(it.value.size) << ")\n"
             }
-            println(strSort)
+            if (tree.children.size() > 0) {
+                println(strSort)
+            }
         }
     }
 
