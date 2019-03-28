@@ -9,6 +9,11 @@ import org.gradle.api.artifacts.result.DependencyResult
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
 
+class DepExtensions {
+    String serverUrl = ""
+    boolean showSort = false
+}
+
 class Dependencies implements Plugin<Project> {
 
     static final int INIT_DEPTH = 1
@@ -17,18 +22,18 @@ class Dependencies implements Plugin<Project> {
 
     @Override
     void apply(Project project) {
+        project.extensions.create("dep", DepExtensions)
         project.task("x-dependencies") {
             doLast {
                 project.configurations.each {
-                    println(it.name)
-                    runConfiguration(it)
-                    println()
+                    println(it.name + " - " + it.description)
+                    runConfiguration(it, false)
                 }
             }
         }
     }
 
-    static void runConfiguration(Configuration conf) {
+    static void runConfiguration(Configuration conf, boolean sort) {
         /**
          * 构建依赖树，unique 用于保持唯一节点
          */
@@ -57,18 +62,25 @@ class Dependencies implements Plugin<Project> {
             int format = make(0, last, INIT_DEPTH)
             showResolvedDependenciesTree(it, strTree, format, INIT_DEPTH)
         }
-        println(strTree)
+        if (tree.children.size() > 0) {
+            println(strTree)
+        } else {
+            println("No dependencies\n")
+        }
+
 
         /**
          * 展示大小排行榜
          */
-        StringBuffer strSort = new StringBuffer()
-        tree.flattenedChild.sort {
-            -it.value.size
-        }.each {
-            strSort << it.key << " (" << it.value.size << " " << formatSize(it.value.size) << ")\n"
+        if (sort) {
+            StringBuffer strSort = new StringBuffer()
+            tree.flattenedChild.sort {
+                -it.value.size
+            }.each {
+                strSort << it.key << " (" << it.value.size << " " << formatSize(it.value.size) << ")\n"
+            }
+            println(strSort)
         }
-        println(strSort)
     }
 
     static TreeNode buildResolvedDependenciesTree(DependencyResult result, Map<String, Map<String, NodeMeta>> unique, ArtifactCollection artifacts) {
