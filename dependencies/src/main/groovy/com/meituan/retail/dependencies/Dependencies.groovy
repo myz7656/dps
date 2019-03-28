@@ -19,50 +19,56 @@ class Dependencies implements Plugin<Project> {
     void apply(Project project) {
         project.task("x-dependencies") {
             doLast {
-                Configuration conf = project.configurations.getByName("_releaseApk")
-
-                /**
-                 * 构建依赖树，unique 用于保持唯一节点
-                 */
-                TreeNode tree = new TreeNode()
-                Map<String, Map<String, NodeMeta>> unique = new HashMap<>()
-                conf.incoming.resolutionResult.root.dependencies.each {
-                    TreeNode node = buildResolvedDependenciesTree(it, unique, conf.incoming.artifacts)
-                    tree.children.add(node)
-
-                    mergeNodeMeta(tree.flattenedChild, node.flattenedChild)
+                project.configurations.each {
+                    println(it.name)
+                    runConfiguration(it)
+                    println()
                 }
-
-                /**
-                 * 计算依赖大小：节点总大小、单独引入的大小
-                 */
-                tree.children.each {
-                    calculateSize(it, tree)
-                }
-
-                /**
-                 * 展示依赖树
-                 */
-                StringBuffer strTree = new StringBuffer()
-                tree.children.each {
-                    boolean last = (it == tree.children.last())
-                    int format = make(0, last, INIT_DEPTH)
-                    showResolvedDependenciesTree(it, strTree, format, INIT_DEPTH)
-                }
-                println(strTree)
-
-                /**
-                 * 展示大小排行榜
-                 */
-                StringBuffer strSort = new StringBuffer()
-                tree.flattenedChild.sort {
-                    -it.value.size
-                }.each {
-                    strSort << it.key << " (" << it.value.size << " " << formatSize(it.value.size) << ")\n"
-                }
-                println(strSort)
             }
         }
+    }
+
+    static void runConfiguration(Configuration conf) {
+        /**
+         * 构建依赖树，unique 用于保持唯一节点
+         */
+        TreeNode tree = new TreeNode()
+        Map<String, Map<String, NodeMeta>> unique = new HashMap<>()
+        conf.incoming.resolutionResult.root.dependencies.each {
+            TreeNode node = buildResolvedDependenciesTree(it, unique, conf.incoming.artifacts)
+            tree.children.add(node)
+
+            mergeNodeMeta(tree.flattenedChild, node.flattenedChild)
+        }
+
+        /**
+         * 计算依赖大小：节点总大小、单独引入的大小
+         */
+        tree.children.each {
+            calculateSize(it, tree)
+        }
+
+        /**
+         * 展示依赖树
+         */
+        StringBuffer strTree = new StringBuffer()
+        tree.children.each {
+            boolean last = (it == tree.children.last())
+            int format = make(0, last, INIT_DEPTH)
+            showResolvedDependenciesTree(it, strTree, format, INIT_DEPTH)
+        }
+        println(strTree)
+
+        /**
+         * 展示大小排行榜
+         */
+        StringBuffer strSort = new StringBuffer()
+        tree.flattenedChild.sort {
+            -it.value.size
+        }.each {
+            strSort << it.key << " (" << it.value.size << " " << formatSize(it.value.size) << ")\n"
+        }
+        println(strSort)
     }
 
     static TreeNode buildResolvedDependenciesTree(DependencyResult result, Map<String, Map<String, NodeMeta>> unique, ArtifactCollection artifacts) {
