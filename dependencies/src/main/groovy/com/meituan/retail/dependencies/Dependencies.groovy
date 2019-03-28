@@ -95,8 +95,8 @@ class Dependencies implements Plugin<Project> {
              * 2，递归将子树的扁平化后的信息添加到父节点的扁平化信息中
              * 3，如果遇到已经解析过的子树节点，扁平化信息从全局的 map 中获取得到
              */
-            treeNode.flattenedChild.put(node.id, new NodeMeta(DEFAULT_COUNT, node.selfSize))
             if (!unique.containsKey(node.id)) {
+                treeNode.flattenedChild.put(node.id, new NodeMeta(DEFAULT_COUNT, node.selfSize))
                 r.selected.dependencies.each {
                     TreeNode child = buildResolvedDependenciesTree(it, unique, artifacts)
                     treeNode.children.add(child)
@@ -106,7 +106,7 @@ class Dependencies implements Plugin<Project> {
                 unique.put(node.id, treeNode.flattenedChild)
             } else {
                 Map<String, NodeMeta> flatten = unique.get(node.id)
-                mergeNodeMeta(treeNode.flattenedChild, flatten)
+                copyNodeMeta(treeNode.flattenedChild, flatten)
             }
         } else {
             node.id = "could not resolve $result.requested.displayName"
@@ -124,6 +124,13 @@ class Dependencies implements Plugin<Project> {
             } else {
                 to.put(it.key, new NodeMeta(it.value.count, it.value.size))
             }
+        }
+    }
+
+    static void copyNodeMeta(Map<String, NodeMeta> to, Map<String, NodeMeta> from) {
+        to.clear()
+        from.each {
+            to.put(it.key, new NodeMeta(it.value.count, it.value.size))
         }
     }
 
