@@ -27,7 +27,7 @@ class Dependencies implements Plugin<Project> {
                 TreeNode tree = new TreeNode()
                 Map<String, Map<String, NodeMeta>> unique = new HashMap<>()
                 conf.incoming.resolutionResult.root.dependencies.each {
-                    TreeNode node = buildResolvedDependenciesTree(tree, it, unique, conf.incoming.artifacts)
+                    TreeNode node = buildResolvedDependenciesTree(it, unique, conf.incoming.artifacts)
                     tree.children.add(node)
 
                     mergeNodeMeta(tree.flattenedChild, node.flattenedChild)
@@ -61,22 +61,12 @@ class Dependencies implements Plugin<Project> {
                     strSort << it.key << " (" << it.value.size << " " << formatSize(it.value.size) << ")\n"
                 }
                 println(strSort)
-
-
-                unique.each {
-                    println("-----" + it.key + "-----")
-                    it.value.each { Map.Entry<String, NodeMeta> entry ->
-                        println(entry.key + " count:" + entry.value.count)
-                    }
-                    println()
-                }
             }
         }
     }
 
-    static TreeNode buildResolvedDependenciesTree(TreeNode parent, DependencyResult result, Map<String, Map<String, NodeMeta>> unique, ArtifactCollection artifacts) {
+    static TreeNode buildResolvedDependenciesTree(DependencyResult result, Map<String, Map<String, NodeMeta>> unique, ArtifactCollection artifacts) {
         TreeNode treeNode = new TreeNode()
-        treeNode.parent = parent
 
         DependencyNode node = treeNode.node
 
@@ -108,7 +98,7 @@ class Dependencies implements Plugin<Project> {
             treeNode.flattenedChild.put(node.id, new NodeMeta(DEFAULT_COUNT, node.selfSize))
             if (!unique.containsKey(node.id)) {
                 r.selected.dependencies.each {
-                    TreeNode child = buildResolvedDependenciesTree(treeNode, it, unique, artifacts)
+                    TreeNode child = buildResolvedDependenciesTree(it, unique, artifacts)
                     treeNode.children.add(child)
 
                     mergeNodeMeta(treeNode.flattenedChild, child.flattenedChild)

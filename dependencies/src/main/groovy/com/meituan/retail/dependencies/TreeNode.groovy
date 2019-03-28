@@ -8,16 +8,15 @@ package com.meituan.retail.dependencies
  */
 class TreeNode {
 
-    Map<String, NodeMeta> flattenedChild
     DependencyNode node
 
-    TreeNode parent
+    Map<String, NodeMeta> flattenedChild
     List<TreeNode> children
 
     TreeNode() {
-        flattenedChild = new HashMap<>()
         node = new DependencyNode()
-        parent = null
+
+        flattenedChild = new HashMap<>()
         children = new LinkedList<>()
     }
 }
