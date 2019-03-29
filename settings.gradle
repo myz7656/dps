@@ -1,1 +1,1 @@
-include ':app', ':dependencies'
+include ':app', ':dps'

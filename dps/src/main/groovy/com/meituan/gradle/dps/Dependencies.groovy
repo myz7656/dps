@@ -1,4 +1,4 @@
-package com.meituan.retail.dependencies
+package com.meituan.gradle.dps
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -10,7 +10,6 @@ import org.gradle.api.artifacts.result.ResolvedArtifactResult
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
 
 class DepExtensions {
-    String serverUrl = ""
     boolean showSort = false
 }
 
@@ -23,10 +22,9 @@ class Dependencies implements Plugin<Project> {
     @Override
     void apply(Project project) {
         project.extensions.create("dep", DepExtensions)
-        project.task("x-dependencies") {
+        project.task("dps") {
             doLast {
-                DepExtensions ext = project.extensions.getByName("dep")
-                String serverUrl = ext.serverUrl
+                DepExtensions ext = project.extensions.getByName("dps")
                 boolean sort = ext.showSort
 
                 project.configurations.each {

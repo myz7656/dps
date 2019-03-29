@@ -1,4 +1,4 @@
-package com.meituan.retail.dependencies
+package com.meituan.gradle.dps
 
 class DependencyNode {
     String id = ""

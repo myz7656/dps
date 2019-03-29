@@ -1,6 +1,8 @@
 apply plugin: 'groovy'
 apply plugin: 'maven'
 
+apply from: 'gradle_mvn_push.gradle'
+
 repositories {
     mavenLocal()
     jcenter()
@@ -9,15 +11,4 @@ repositories {
 
 dependencies {
     compile gradleApi()
-}
-
-group "com.meituan.plugin.dependencies"
-version "1.0.0"
-
-uploadArchives{
-    repositories {
-        mavenDeployer {
-            repository(url: uri('../../repo'))
-        }
-    }
 }
