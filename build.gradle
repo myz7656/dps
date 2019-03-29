@@ -1,7 +1,6 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-
 buildscript {
     repositories {
+        maven { url 'http://depot.sankuai.com/nexus/content/groups/public/' }
         google()
         jcenter()
     }
@@ -12,6 +11,12 @@ buildscript {
 
 allprojects {
     repositories {
+        maven {
+            url 'http://depot.sankuai.com/nexus/content/groups/public/'
+        }
+        maven {
+            url 'http://maven.sankuai.com/nexus/content/repositories/snapshots'
+        }
         google()
         jcenter()
     }
