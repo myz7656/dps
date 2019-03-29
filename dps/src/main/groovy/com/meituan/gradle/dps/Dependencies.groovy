@@ -21,7 +21,7 @@ class Dependencies implements Plugin<Project> {
 
     @Override
     void apply(Project project) {
-        project.extensions.create("dep", DepExtensions)
+        project.extensions.create("dps", DepExtensions)
         project.task("dps") {
             doLast {
                 DepExtensions ext = project.extensions.getByName("dps")
