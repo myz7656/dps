@@ -2,15 +2,13 @@ package com.meituan.gradle.dps
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.api.artifacts.ArtifactCollection
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.component.ModuleComponentSelector
 import org.gradle.api.artifacts.result.DependencyResult
-import org.gradle.api.artifacts.result.ResolvedArtifactResult
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
 
 class DepExtensions {
-    boolean showSort = false
+    boolean sort = false
 }
 
 class Dependencies implements Plugin<Project> {
@@ -25,11 +23,13 @@ class Dependencies implements Plugin<Project> {
         project.task("dps") {
             doLast {
                 DepExtensions ext = project.extensions.getByName("dps")
-                boolean sort = ext.showSort
+                if (ext == null) {
+                    ext = new DepExtensions()
+                }
 
                 project.configurations.each {
                     println(it.name + " - " + it.description)
-                    runConfiguration(it, sort)
+                    runConfiguration(it, ext.sort)
                 }
             }
         }
@@ -37,12 +37,20 @@ class Dependencies implements Plugin<Project> {
 
     static void runConfiguration(Configuration conf, boolean sort) {
         /**
-         * 构建依赖树，unique 用于保持唯一节点
+         * 准备文件大小
+         */
+        Map<String, File> flattenedFiles = new HashMap<>()
+        conf.incoming.artifacts.each {
+            flattenedFiles.put(it.id.componentIdentifier.displayName, it.file)
+        }
+
+        /**
+         * 构建依赖树，flattenedTree 用于保持唯一节点
          */
         TreeNode tree = new TreeNode()
-        Map<String, Map<String, NodeMeta>> unique = new HashMap<>()
+        Map<String, TreeNode> flattenedTree = new HashMap<>()
         conf.incoming.resolutionResult.root.dependencies.each {
-            TreeNode node = buildResolvedDependenciesTree(it, unique, conf.incoming.artifacts)
+            TreeNode node = buildResolvedDependenciesTree(it, flattenedTree, flattenedFiles)
             tree.children.add(node)
 
             mergeNodeMeta(tree.flattenedChild, node.flattenedChild)
@@ -58,83 +66,70 @@ class Dependencies implements Plugin<Project> {
         /**
          * 展示依赖树
          */
-        StringBuffer strTree = new StringBuffer()
         tree.children.each {
             boolean last = (it == tree.children.last())
             int format = make(0, last, INIT_DEPTH)
-            showResolvedDependenciesTree(it, strTree, format, INIT_DEPTH)
+            showResolvedDependenciesTree(it, format, INIT_DEPTH)
         }
-        if (tree.children.size() > 0) {
-            println(strTree)
-        } else {
-            println("No dependencies\n")
+        if (tree.children.size() == 0) {
+            println("No dependencies")
         }
+        println()
 
         /**
          * 展示大小排行榜
          */
-        if (sort) {
-            StringBuffer strSort = new StringBuffer()
+        if (sort && tree.flattenedChild.size() > 0) {
+            println("flattened - show flattened dependencies, sort by size")
             tree.flattenedChild.sort {
                 -it.value.size
             }.each {
-                strSort << it.key << " (" << it.value.size << " " << formatSize(it.value.size) << ")\n"
+                println(it.key + " (" + it.value.size + " " + formatSize(it.value.size) + ")")
             }
-            if (tree.children.size() > 0) {
-                println(strSort)
-            }
+            println()
         }
     }
 
-    static TreeNode buildResolvedDependenciesTree(DependencyResult result, Map<String, Map<String, NodeMeta>> unique, ArtifactCollection artifacts) {
+    static TreeNode buildResolvedDependenciesTree(DependencyResult result, Map<String, TreeNode> flattenedTree, Map<String, File> flattenedFiles) {
         TreeNode treeNode = new TreeNode()
-
-        DependencyNode node = treeNode.node
-
         if (result instanceof ResolvedDependencyResult) {
             ResolvedDependencyResult r = result
 
-            /**
-             * 准备 DependencyNode 信息
-             */
-            node.id = r.selected.id.displayName
-            node.group = r.selected.moduleVersion.group
-            node.name = r.selected.moduleVersion.name
-            node.version = r.selected.moduleVersion.version
-            if (r.requested instanceof ModuleComponentSelector) {
-                node.requestedVersion = ((ModuleComponentSelector)r.requested).version
-            }
-            artifacts.artifacts.each { ResolvedArtifactResult rar ->
-                if (node.id == rar.getId().componentIdentifier.displayName) {
-                    node.selfSize = rar.file.size()
-                }
-            }
-
-            /**
-             * 添加扁平化后的节点信息，添加子树结构
-             * 1，这里如果子树如果已经解析过，则不再解析
-             * 2，递归将子树的扁平化后的信息添加到父节点的扁平化信息中
-             * 3，如果遇到已经解析过的子树节点，扁平化信息从全局的 map 中获取得到
-             */
-            if (!unique.containsKey(node.id)) {
-                treeNode.flattenedChild.put(node.id, new NodeMeta(DEFAULT_COUNT, node.selfSize))
+            prepareNode(treeNode.node, r, flattenedFiles)
+            String id = treeNode.node.id
+            if (!flattenedTree.containsKey(id)) {
+                treeNode.flattenedChild.put(id, new NodeMeta(DEFAULT_COUNT, treeNode.node.selfSize))
                 r.selected.dependencies.each {
-                    TreeNode child = buildResolvedDependenciesTree(it, unique, artifacts)
+                    TreeNode child = buildResolvedDependenciesTree(it, flattenedTree, flattenedFiles)
                     treeNode.children.add(child)
 
                     mergeNodeMeta(treeNode.flattenedChild, child.flattenedChild)
                 }
-                unique.put(node.id, treeNode.flattenedChild)
+                flattenedTree.put(id, treeNode)
             } else {
-                Map<String, NodeMeta> flatten = unique.get(node.id)
-                copyNodeMeta(treeNode.flattenedChild, flatten)
+                TreeNode exist = flattenedTree.get(id)
+                treeNode.flattenedChild = exist.flattenedChild
             }
+
         } else {
-            node.id = "could not resolve $result.requested.displayName"
-            mergeNodeMeta(treeNode.flattenedChild, node)
+            treeNode.node.id = "could not resolve $result.requested.displayName"
         }
 
         return treeNode
+    }
+
+    static void prepareNode(DependencyNode node, ResolvedDependencyResult r, Map<String, File> files) {
+        node.id = r.selected.id.displayName
+        node.group = r.selected.moduleVersion.group
+        node.name = r.selected.moduleVersion.name
+        node.version = r.selected.moduleVersion.version
+        if (r.requested instanceof ModuleComponentSelector) {
+            node.requestedVersion = ((ModuleComponentSelector)r.requested).version
+        }
+        File file = files.get(node.id)
+        if (file != null) {
+            node.selfSize = file.size()
+        }
     }
 
     static void mergeNodeMeta(Map<String, NodeMeta> to, Map<String, NodeMeta> from) {
@@ -145,13 +140,6 @@ class Dependencies implements Plugin<Project> {
             } else {
                 to.put(it.key, new NodeMeta(it.value.count, it.value.size))
             }
-        }
-    }
-
-    static void copyNodeMeta(Map<String, NodeMeta> to, Map<String, NodeMeta> from) {
-        to.clear()
-        from.each {
-            to.put(it.key, new NodeMeta(it.value.count, it.value.size))
         }
     }
 
@@ -181,18 +169,19 @@ class Dependencies implements Plugin<Project> {
         }
     }
 
-    static void showResolvedDependenciesTree(TreeNode treeNode, StringBuffer out, int format, int depth) {
-        showResolvedDependencyNode(treeNode, out, format, depth)
+    static void showResolvedDependenciesTree(TreeNode treeNode, int format, int depth) {
+        showResolvedDependencyNode(treeNode, format, depth)
 
         treeNode.children.each {
             boolean last = (it == treeNode.children.last())
             int dep = depth + DEPTH_STEP
             int f = make(format, last, dep)
-            showResolvedDependenciesTree(it, out, f, dep)
+            showResolvedDependenciesTree(it, f, dep)
         }
     }
 
-    private static void showResolvedDependencyNode(TreeNode treeNode, StringBuffer out, int format, int depth) {
+    private static void showResolvedDependencyNode(TreeNode treeNode, int format, int depth) {
+        StringBuffer out = new StringBuffer()
         DependencyNode node = treeNode.node
         for (int i = 0; i < depth; ++i) {
             int actor = (0x1 << i)
@@ -229,7 +218,8 @@ class Dependencies implements Plugin<Project> {
         if (node.affectSize > 0) {
             out << ", affect:" << affectStr
         }
-        out << ")\n"
+        out << ")"
+        println(out)
     }
 
 
